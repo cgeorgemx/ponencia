@@ -1,0 +1,3493 @@
+Guarde el siguiente código como **`index.html`**. La tercera aplicación acepta únicamente archivos **PDF** y extrae el texto mediante PDF.js. El acceso al GPT se encuentra en la parte superior del sitio.
+
+> El análisis funciona con PDF que contienen texto seleccionable. Los documentos escaneados como imagen requieren OCR.
+
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <meta
+    name="description"
+    content="Aplicación web para diseñar, escribir y analizar ponencias teóricas tipo ensayo."
+  >
+
+  <title>De la idea a la ponencia</title>
+
+  <!-- PDF.js: permite extraer texto de archivos PDF en el navegador -->
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+  ></script>
+
+  <style>
+    :root {
+      --primary: #9d1220;
+      --primary-dark: #690811;
+      --primary-light: #c93443;
+      --secondary: #202631;
+      --background: #f5f6f8;
+      --surface: #ffffff;
+      --surface-soft: #fff5f6;
+      --text: #20242c;
+      --muted: #667085;
+      --border: #dfe3e8;
+      --success: #18794e;
+      --warning: #a15c00;
+      --danger: #b42318;
+      --shadow: 0 14px 36px rgba(31, 41, 55, 0.10);
+      --radius: 18px;
+      --small-radius: 10px;
+      --max-width: 1180px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--background);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.6;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .container {
+      width: min(92%, var(--max-width));
+      margin: 0 auto;
+    }
+
+    /* =====================================================
+       ENCABEZADO
+    ===================================================== */
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.97);
+      backdrop-filter: blur(12px);
+    }
+
+    .header-inner {
+      min-height: 82px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 22px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .brand-icon {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 14px;
+      color: white;
+      background:
+        linear-gradient(
+          145deg,
+          var(--primary-light),
+          var(--primary-dark)
+        );
+      box-shadow: 0 8px 20px rgba(157, 18, 32, 0.24);
+      font-weight: 900;
+    }
+
+    .brand-text strong {
+      display: block;
+      color: var(--primary-dark);
+      font-size: 1rem;
+    }
+
+    .brand-text span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .main-nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .nav-link {
+      padding: 10px 12px;
+      border: 0;
+      border-radius: 9px;
+      color: var(--secondary);
+      background: transparent;
+      font-size: 0.88rem;
+      font-weight: 800;
+    }
+
+    .nav-link:hover,
+    .nav-link.active {
+      color: var(--primary);
+      background: #fcebed;
+    }
+
+    .gpt-top-button {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      padding: 10px 15px;
+      border-radius: 11px;
+      color: white;
+      background: #161a20;
+      text-decoration: none;
+      font-size: 0.82rem;
+      font-weight: 900;
+      white-space: nowrap;
+      transition:
+        transform 0.2s ease,
+        background 0.2s ease;
+    }
+
+    .gpt-top-button:hover {
+      transform: translateY(-2px);
+      background: #000000;
+    }
+
+    .gpt-icon {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: #161a20;
+      background: white;
+      font-size: 0.75rem;
+      font-weight: 900;
+    }
+
+    .menu-button {
+      display: none;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: white;
+      font-weight: 800;
+    }
+
+    /* =====================================================
+       NAVEGACIÓN INTERNA
+    ===================================================== */
+
+    .page {
+      display: none;
+      animation: fadeIn 0.25s ease;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* =====================================================
+       BOTONES
+    ===================================================== */
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 11px;
+    }
+
+    .button {
+      min-height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 18px;
+      border: 0;
+      border-radius: 11px;
+      text-decoration: none;
+      font-weight: 900;
+      transition:
+        transform 0.2s ease,
+        background 0.2s ease,
+        box-shadow 0.2s ease;
+    }
+
+    .button:hover {
+      transform: translateY(-2px);
+    }
+
+    .button-primary {
+      color: white;
+      background: var(--primary);
+      box-shadow: 0 9px 22px rgba(157, 18, 32, 0.20);
+    }
+
+    .button-primary:hover {
+      background: var(--primary-dark);
+    }
+
+    .button-secondary {
+      color: var(--secondary);
+      border: 1px solid var(--border);
+      background: white;
+    }
+
+    .button-light {
+      color: var(--primary-dark);
+      background: white;
+    }
+
+    .button-outline-light {
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.43);
+      background: rgba(255, 255, 255, 0.10);
+    }
+
+    /* =====================================================
+       INICIO
+    ===================================================== */
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 92px 0 82px;
+      color: white;
+      background:
+        radial-gradient(
+          circle at 84% 20%,
+          rgba(255, 255, 255, 0.14),
+          transparent 29%
+        ),
+        linear-gradient(
+          135deg,
+          #64070f 0%,
+          #9d1220 55%,
+          #ca3847 100%
+        );
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -115px;
+      bottom: -185px;
+      width: 360px;
+      height: 360px;
+      border: 55px solid rgba(255, 255, 255, 0.07);
+      border-radius: 50%;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 2;
+      max-width: 830px;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      margin-bottom: 18px;
+      padding: 7px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.30);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.10);
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hero h1 {
+      margin: 0 0 18px;
+      font-size: clamp(2.5rem, 6vw, 4.9rem);
+      line-height: 1.03;
+      letter-spacing: -0.04em;
+    }
+
+    .hero p {
+      max-width: 740px;
+      margin: 0 0 30px;
+      color: #ffe9ec;
+      font-size: clamp(1rem, 2vw, 1.25rem);
+    }
+
+    .section {
+      padding: 72px 0;
+    }
+
+    .section-soft {
+      background: var(--surface-soft);
+    }
+
+    .section-heading {
+      max-width: 780px;
+      margin-bottom: 34px;
+    }
+
+    .section-heading span {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--primary);
+      font-size: 0.8rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .section-heading h2 {
+      margin: 0 0 12px;
+      font-size: clamp(1.9rem, 4vw, 3rem);
+      line-height: 1.15;
+    }
+
+    .section-heading p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.03rem;
+    }
+
+    .module-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
+    }
+
+    .module-card {
+      min-height: 340px;
+      display: flex;
+      flex-direction: column;
+      padding: 28px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: white;
+      box-shadow: var(--shadow);
+    }
+
+    .module-number {
+      width: 47px;
+      height: 47px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 19px;
+      border-radius: 14px;
+      color: white;
+      background:
+        linear-gradient(
+          145deg,
+          var(--primary-light),
+          var(--primary-dark)
+        );
+      font-weight: 900;
+    }
+
+    .module-card h3 {
+      margin: 0 0 11px;
+      color: var(--primary-dark);
+      font-size: 1.35rem;
+    }
+
+    .module-card p {
+      flex-grow: 1;
+      margin: 0 0 18px;
+      color: var(--muted);
+    }
+
+    .module-card ul {
+      margin: 0 0 25px;
+      padding-left: 20px;
+      font-size: 0.92rem;
+    }
+
+    /* =====================================================
+       PÁGINAS INTERIORES
+    ===================================================== */
+
+    .inner-hero {
+      padding: 58px 0 49px;
+      color: white;
+      background:
+        linear-gradient(
+          135deg,
+          var(--primary-dark),
+          var(--primary)
+        );
+    }
+
+    .inner-hero h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 5vw, 3.7rem);
+      line-height: 1.1;
+    }
+
+    .inner-hero p {
+      max-width: 790px;
+      margin: 0;
+      color: #ffe6e9;
+      font-size: 1.05rem;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.25fr);
+      gap: 26px;
+      padding: 43px 0 75px;
+      align-items: start;
+    }
+
+    .panel {
+      padding: 27px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: white;
+      box-shadow: var(--shadow);
+    }
+
+    .panel.sticky {
+      position: sticky;
+      top: 104px;
+    }
+
+    .panel h2,
+    .panel h3 {
+      margin-top: 0;
+    }
+
+    .panel-intro {
+      margin-top: -5px;
+      margin-bottom: 22px;
+      color: var(--muted);
+    }
+
+    /* =====================================================
+       FORMULARIOS
+    ===================================================== */
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--secondary);
+      font-size: 0.9rem;
+      font-weight: 900;
+    }
+
+    .required {
+      color: var(--danger);
+    }
+
+    .help-text {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid #cfd4dc;
+      border-radius: var(--small-radius);
+      outline: none;
+      color: var(--text);
+      background: white;
+      transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+    }
+
+    input,
+    select {
+      min-height: 46px;
+      padding: 10px 12px;
+    }
+
+    textarea {
+      min-height: 126px;
+      padding: 12px;
+      resize: vertical;
+      line-height: 1.6;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(157, 18, 32, 0.10);
+    }
+
+    .form-grid-two {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    /* =====================================================
+       RESULTADOS
+    ===================================================== */
+
+    .output-placeholder {
+      min-height: 390px;
+      display: grid;
+      place-items: center;
+      padding: 35px;
+      border: 2px dashed #d9dde4;
+      border-radius: 15px;
+      color: var(--muted);
+      background: #fafbfc;
+      text-align: center;
+    }
+
+    .result-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .result-block {
+      margin-bottom: 18px;
+      padding: 18px;
+      border-left: 4px solid var(--primary);
+      border-radius: 0 12px 12px 0;
+      background: #fff7f8;
+    }
+
+    .result-block h3 {
+      margin: 0 0 8px;
+      color: var(--primary-dark);
+      font-size: 1rem;
+    }
+
+    .result-block p {
+      margin: 0;
+    }
+
+    .result-block ul,
+    .result-block ol {
+      margin-bottom: 0;
+      padding-left: 22px;
+    }
+
+    .notice {
+      margin: 18px 0;
+      padding: 15px 17px;
+      border: 1px solid #f0cf8a;
+      border-radius: 11px;
+      color: #663c00;
+      background: #fff3d6;
+    }
+
+    .notice.success {
+      color: #0f5132;
+      border-color: #addbc2;
+      background: #eaf7f0;
+    }
+
+    .notice.danger {
+      color: #842029;
+      border-color: #efb6bc;
+      background: #fbeaec;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* =====================================================
+       APLICACIÓN DE ESCRITURA
+    ===================================================== */
+
+    .writing-layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 24px;
+      padding: 43px 0 75px;
+      align-items: start;
+    }
+
+    .tips-menu {
+      position: sticky;
+      top: 104px;
+      padding: 22px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: white;
+      box-shadow: var(--shadow);
+    }
+
+    .tips-menu h3 {
+      margin-top: 0;
+    }
+
+    .tip-button {
+      width: 100%;
+      margin-bottom: 8px;
+      padding: 11px 12px;
+      border: 0;
+      border-radius: 9px;
+      color: var(--secondary);
+      background: #f5f6f8;
+      text-align: left;
+      font-size: 0.88rem;
+      font-weight: 900;
+    }
+
+    .tip-button:hover {
+      color: var(--primary);
+      background: #fcecef;
+    }
+
+    .writing-main {
+      min-width: 0;
+    }
+
+    .editor {
+      min-height: 440px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 1.02rem;
+    }
+
+    .tip-display {
+      margin-bottom: 18px;
+      padding: 19px;
+      border: 1px solid #f2ccd1;
+      border-radius: 13px;
+      color: var(--secondary);
+      background: #fff7f8;
+    }
+
+    .tip-display h3 {
+      margin: 0 0 8px;
+      color: var(--primary-dark);
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 13px;
+      margin: 18px 0;
+    }
+
+    .metric {
+      padding: 15px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: white;
+      text-align: center;
+    }
+
+    .metric strong {
+      display: block;
+      color: var(--primary);
+      font-size: 1.55rem;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .feedback-list {
+      display: grid;
+      gap: 11px;
+      margin-top: 18px;
+    }
+
+    .feedback-item {
+      padding: 14px 15px;
+      border-left: 4px solid #98a2b3;
+      border-radius: 11px;
+      background: #f5f6f8;
+    }
+
+    .feedback-item.good {
+      border-left-color: var(--success);
+      background: #edf8f2;
+    }
+
+    .feedback-item.warning {
+      border-left-color: var(--warning);
+      background: #fff7e6;
+    }
+
+    .feedback-item.danger {
+      border-left-color: var(--danger);
+      background: #fff0f1;
+    }
+
+    /* =====================================================
+       APLICACIÓN PARA PDF
+    ===================================================== */
+
+    .upload-zone {
+      padding: 36px;
+      border: 2px dashed #c9ced7;
+      border-radius: 15px;
+      background: #fafbfc;
+      text-align: center;
+      transition:
+        border-color 0.2s ease,
+        background 0.2s ease;
+    }
+
+    .upload-zone.dragover {
+      border-color: var(--primary);
+      background: #fff3f5;
+    }
+
+    .upload-icon {
+      width: 62px;
+      height: 62px;
+      display: grid;
+      place-items: center;
+      margin: 0 auto 14px;
+      border-radius: 18px;
+      color: white;
+      background: var(--primary);
+      font-size: 1rem;
+      font-weight: 900;
+    }
+
+    .upload-zone input {
+      margin-top: 14px;
+    }
+
+    .progress-container {
+      height: 9px;
+      overflow: hidden;
+      margin-top: 16px;
+      border-radius: 999px;
+      background: #e3e6eb;
+    }
+
+    .progress-bar {
+      width: 0;
+      height: 100%;
+      background: var(--primary);
+      transition: width 0.2s ease;
+    }
+
+    .score-container {
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr);
+      gap: 22px;
+      align-items: center;
+      margin: 20px 0 25px;
+      padding: 22px;
+      border-radius: 15px;
+      background: #faf5f6;
+    }
+
+    .score-circle {
+      position: relative;
+      width: 132px;
+      height: 132px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: var(--primary-dark);
+      background:
+        conic-gradient(
+          var(--primary) var(--score-angle, 0deg),
+          #e4e7ec var(--score-angle, 0deg)
+        );
+    }
+
+    .score-circle::after {
+      content: "";
+      position: absolute;
+      inset: 13px;
+      border-radius: 50%;
+      background: white;
+    }
+
+    .score-circle strong {
+      position: relative;
+      z-index: 2;
+      font-size: 2rem;
+    }
+
+    .analysis-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+    }
+
+    .analysis-card {
+      padding: 17px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: white;
+    }
+
+    .analysis-card h4 {
+      margin: 9px 0 8px;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 900;
+    }
+
+    .status-good {
+      color: #0f5132;
+      background: #dff3e8;
+    }
+
+    .status-warning {
+      color: #704000;
+      background: #ffefc7;
+    }
+
+    .status-danger {
+      color: #842029;
+      background: #f9dadd;
+    }
+
+    .document-preview {
+      max-height: 360px;
+      overflow: auto;
+      margin-top: 20px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      white-space: pre-wrap;
+      background: #fafbfc;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 0.92rem;
+    }
+
+    /* =====================================================
+       PIE DE PÁGINA
+    ===================================================== */
+
+    .site-footer {
+      padding: 35px 0;
+      color: #dfe2e7;
+      background: #17191e;
+    }
+
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 25px;
+    }
+
+    .site-footer a {
+      color: white;
+      font-weight: 800;
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    /* =====================================================
+       DISEÑO ADAPTABLE
+    ===================================================== */
+
+    @media (max-width: 1080px) {
+      .header-inner {
+        flex-wrap: wrap;
+        padding: 10px 0;
+      }
+
+      .header-actions {
+        width: 100%;
+        justify-content: space-between;
+      }
+    }
+
+    @media (max-width: 940px) {
+      .module-grid,
+      .workspace,
+      .writing-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .panel.sticky,
+      .tips-menu {
+        position: static;
+      }
+
+      .analysis-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .main-nav {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        display: none;
+        padding: 14px 4%;
+        border-bottom: 1px solid var(--border);
+        background: white;
+        box-shadow: var(--shadow);
+      }
+
+      .main-nav.open {
+        display: grid;
+      }
+
+      .menu-button {
+        display: block;
+      }
+
+      .nav-link {
+        text-align: left;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .brand-text span {
+        display: none;
+      }
+
+      .gpt-top-button {
+        padding: 9px 11px;
+      }
+
+      .gpt-label {
+        display: none;
+      }
+
+      .form-grid-two,
+      .score-container {
+        grid-template-columns: 1fr;
+      }
+
+      .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .score-circle {
+        margin: 0 auto;
+      }
+
+      .footer-inner {
+        display: block;
+      }
+
+      .hero {
+        padding: 70px 0 66px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- =====================================================
+       ENCABEZADO
+  ====================================================== -->
+
+  <header class="site-header">
+    <div class="container header-inner">
+
+      <a
+        class="brand"
+        data-route="inicio"
+        aria-label="Ir a la página de inicio"
+      >
+        <div class="brand-icon">DP</div>
+
+        <div class="brand-text">
+          <strong>De la idea a la ponencia</strong>
+          <span>Organizar, argumentar y comunicar</span>
+        </div>
+      </a>
+
+      <div class="header-actions">
+
+        <a
+          class="gpt-top-button"
+          href="https://chatgpt.com/g/g-6a3db41bb3948191ba30ca4ec8df6bf5-laboratorio-de-escritura-de-textos-cientificos"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Abrir el Laboratorio de Escritura de Textos Científicos"
+        >
+          <span class="gpt-icon">AI</span>
+
+          <span class="gpt-label">
+            Laboratorio de Escritura Científica
+          </span>
+        </a>
+
+        <button
+          class="menu-button"
+          id="menuButton"
+          type="button"
+          aria-label="Abrir el menú"
+        >
+          Menú
+        </button>
+
+        <nav
+          class="main-nav"
+          id="mainNav"
+          aria-label="Navegación principal"
+        >
+          <button class="nav-link active" data-route="inicio">
+            Inicio
+          </button>
+
+          <button class="nav-link" data-route="estructura">
+            1. Estructura
+          </button>
+
+          <button class="nav-link" data-route="escritura">
+            2. Escritura
+          </button>
+
+          <button class="nav-link" data-route="analisis">
+            3. Consistencia
+          </button>
+        </nav>
+
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- =====================================================
+         PÁGINA DE INICIO
+    ====================================================== -->
+
+    <section class="page active" id="page-inicio">
+
+      <div class="hero">
+        <div class="container hero-content">
+
+          <span class="eyebrow">
+            Microtaller de escritura académica
+          </span>
+
+          <h1>De la idea a la ponencia</h1>
+
+          <p>
+            Transforma un tema de interés en una ponencia teórica sólida,
+            argumentada y lista para comunicar en un congreso académico.
+          </p>
+
+          <div class="button-row">
+
+            <button
+              class="button button-light"
+              data-route="estructura"
+            >
+              Comenzar mi ponencia
+            </button>
+
+            <button
+              class="button button-outline-light"
+              data-route="escritura"
+            >
+              Explorar consejos de escritura
+            </button>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="container">
+
+          <div class="section-heading">
+            <span>Ruta del taller</span>
+
+            <h2>
+              Tres aplicaciones para construir una ponencia teórica
+            </h2>
+
+            <p>
+              Cada módulo corresponde con una sesión del taller y permite
+              generar productos concretos para avanzar en la escritura.
+            </p>
+          </div>
+
+          <div class="module-grid">
+
+            <article class="module-card">
+              <div class="module-number">1</div>
+
+              <h3>Del tema a la estructura</h3>
+
+              <p>
+                Define el tema, el constructo y sus dimensiones para formular
+                una pregunta, un objetivo y una propuesta de aporte teórico.
+              </p>
+
+              <ul>
+                <li>Relación constructo–dimensión–variable.</li>
+                <li>Identificación del vacío conceptual.</li>
+                <li>Pregunta y objetivo de la ponencia.</li>
+                <li>Estructura argumentativa sugerida.</li>
+              </ul>
+
+              <button
+                class="button button-primary"
+                data-route="estructura"
+              >
+                Diseñar mi propuesta
+              </button>
+            </article>
+
+            <article class="module-card">
+              <div class="module-number">2</div>
+
+              <h3>Escritura y argumentación</h3>
+
+              <p>
+                Recibe recomendaciones para escribir la introducción,
+                organizar argumentos, integrar fuentes y elaborar
+                conclusiones.
+              </p>
+
+              <ul>
+                <li>Estructura del párrafo académico.</li>
+                <li>Argumentos, evidencias e interpretación.</li>
+                <li>Conectores y continuidad temática.</li>
+                <li>Análisis automático de fragmentos.</li>
+              </ul>
+
+              <button
+                class="button button-primary"
+                data-route="escritura"
+              >
+                Abrir asistente
+              </button>
+            </article>
+
+            <article class="module-card">
+              <div class="module-number">3</div>
+
+              <h3>Consistencia interna</h3>
+
+              <p>
+                Sube la ponencia en PDF y revisa la coherencia entre el
+                problema, la pregunta, el objetivo, la tesis, el desarrollo
+                y las conclusiones.
+              </p>
+
+              <ul>
+                <li>Carga de archivos PDF.</li>
+                <li>Detección de componentes académicos.</li>
+                <li>Continuidad del constructo y dimensiones.</li>
+                <li>Informe de recomendaciones.</li>
+              </ul>
+
+              <button
+                class="button button-primary"
+                data-route="analisis"
+              >
+                Analizar PDF
+              </button>
+            </article>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="section section-soft">
+        <div class="container">
+
+          <div class="section-heading">
+            <span>Producto final</span>
+
+            <h2>Una ponencia teórica tipo ensayo</h2>
+
+            <p>
+              La propuesta deberá sostener una tesis, dialogar con literatura
+              científica y ofrecer una integración conceptual, interpretación
+              crítica o marco explicativo que represente un aporte académico.
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+    <!-- =====================================================
+         APLICACIÓN 1: ESTRUCTURA
+    ====================================================== -->
+
+    <section class="page" id="page-estructura">
+
+      <div class="inner-hero">
+        <div class="container">
+
+          <h1>Del tema a la estructura teórica</h1>
+
+          <p>
+            Identifica el constructo, sus dimensiones y el aporte que puede
+            surgir de su análisis para construir la arquitectura inicial de
+            la ponencia.
+          </p>
+
+        </div>
+      </div>
+
+      <div class="container workspace">
+
+        <section class="panel sticky">
+
+          <h2>Datos de la propuesta</h2>
+
+          <p class="panel-intro">
+            Complete los campos con formulaciones claras y conceptualmente
+            delimitadas.
+          </p>
+
+          <form id="structureForm">
+
+            <div class="form-group">
+              <label for="researchTopic">
+                Tema de investigación
+                <span class="required">*</span>
+              </label>
+
+              <input
+                id="researchTopic"
+                type="text"
+                required
+                placeholder="Ej. inteligencia artificial en educación superior"
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="researchContext">
+                Contexto de análisis
+              </label>
+
+              <input
+                id="researchContext"
+                type="text"
+                placeholder="Ej. universidades latinoamericanas"
+              >
+
+              <small class="help-text">
+                Puede ser un nivel educativo, una región, una institución
+                o un grupo profesional.
+              </small>
+            </div>
+
+            <div class="form-group">
+              <label for="construct">
+                Constructo central
+                <span class="required">*</span>
+              </label>
+
+              <input
+                id="construct"
+                type="text"
+                required
+                placeholder="Ej. alfabetización en inteligencia artificial"
+              >
+
+              <small class="help-text">
+                El constructo es el concepto complejo que será explicado,
+                discutido o reinterpretado.
+              </small>
+            </div>
+
+            <div class="form-grid-two">
+
+              <div class="form-group">
+                <label for="dimensionOne">
+                  Dimensión 1
+                  <span class="required">*</span>
+                </label>
+
+                <input
+                  id="dimensionOne"
+                  type="text"
+                  required
+                  placeholder="Ej. dimensión crítica"
+                >
+              </div>
+
+              <div class="form-group">
+                <label for="dimensionTwo">
+                  Dimensión 2
+                  <span class="required">*</span>
+                </label>
+
+                <input
+                  id="dimensionTwo"
+                  type="text"
+                  required
+                  placeholder="Ej. dimensión ética"
+                >
+              </div>
+
+            </div>
+
+            <div class="form-group">
+              <label for="theoreticalGap">
+                Vacío, tensión o problema conceptual
+              </label>
+
+              <textarea
+                id="theoreticalGap"
+                placeholder="Ej. predominan aproximaciones instrumentales que no integran las dimensiones crítica y ética..."
+              ></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="contributionType">
+                Tipo de aporte esperado
+              </label>
+
+              <select id="contributionType">
+
+                <option value="marco conceptual integrador">
+                  Marco conceptual integrador
+                </option>
+
+                <option value="modelo teórico explicativo">
+                  Modelo teórico explicativo
+                </option>
+
+                <option value="tipología conceptual">
+                  Tipología conceptual
+                </option>
+
+                <option value="reinterpretación crítica">
+                  Reinterpretación crítica
+                </option>
+
+                <option value="agenda de investigación">
+                  Agenda de investigación
+                </option>
+
+                <option value="principios orientadores">
+                  Principios orientadores
+                </option>
+
+              </select>
+            </div>
+
+            <button
+              class="button button-primary"
+              type="submit"
+            >
+              Generar estructura de la ponencia
+            </button>
+
+          </form>
+        </section>
+
+        <section class="panel">
+
+          <h2>Propuesta generada</h2>
+
+          <p class="panel-intro">
+            Revise y ajuste las formulaciones. La herramienta genera una base
+            de trabajo y no sustituye las decisiones académicas del autor.
+          </p>
+
+          <div id="structureOutput">
+
+            <div class="output-placeholder">
+              <div>
+
+                <strong>
+                  Su propuesta aparecerá en este espacio.
+                </strong>
+
+                <p>
+                  Complete el formulario para generar la pregunta, el objetivo,
+                  la tesis y la estructura argumentativa.
+                </p>
+
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+    </section>
+
+    <!-- =====================================================
+         APLICACIÓN 2: ESCRITURA
+    ====================================================== -->
+
+    <section class="page" id="page-escritura">
+
+      <div class="inner-hero">
+        <div class="container">
+
+          <h1>Escritura y argumentación académica</h1>
+
+          <p>
+            Organiza ideas, construye párrafos y revisa la claridad,
+            conectividad y fuerza argumentativa del texto.
+          </p>
+
+        </div>
+      </div>
+
+      <div class="container writing-layout">
+
+        <aside class="tips-menu">
+
+          <h3>Guía de escritura</h3>
+
+          <button class="tip-button" data-tip="introduccion">
+            Introducción
+          </button>
+
+          <button class="tip-button" data-tip="problema">
+            Problema teórico
+          </button>
+
+          <button class="tip-button" data-tip="argumento">
+            Construcción del argumento
+          </button>
+
+          <button class="tip-button" data-tip="contraargumento">
+            Contraargumento
+          </button>
+
+          <button class="tip-button" data-tip="citas">
+            Integración de citas
+          </button>
+
+          <button class="tip-button" data-tip="conclusiones">
+            Conclusiones
+          </button>
+
+          <button class="tip-button" data-tip="estilo">
+            Estilo académico
+          </button>
+
+        </aside>
+
+        <div class="writing-main">
+
+          <section class="panel">
+
+            <div class="tip-display" id="tipDisplay">
+
+              <h3>Comience por la tesis</h3>
+
+              <p>
+                Antes de redactar, formule en una oración la idea central que
+                defenderá. Cada apartado deberá contribuir a justificar,
+                precisar o problematizar esa tesis.
+              </p>
+
+            </div>
+
+            <div class="form-group">
+
+              <label for="writingText">
+                Escriba o pegue un fragmento
+              </label>
+
+              <textarea
+                id="writingText"
+                class="editor"
+                placeholder="Pegue aquí la introducción, un apartado teórico, un argumento o las conclusiones..."
+              ></textarea>
+
+            </div>
+
+            <div class="button-row">
+
+              <button
+                class="button button-primary"
+                id="analyzeWritingButton"
+                type="button"
+              >
+                Analizar fragmento
+              </button>
+
+              <button
+                class="button button-secondary"
+                id="clearWritingButton"
+                type="button"
+              >
+                Limpiar
+              </button>
+
+            </div>
+
+            <div class="metrics-grid">
+
+              <div class="metric">
+                <strong id="wordMetric">0</strong>
+                <span>Palabras</span>
+              </div>
+
+              <div class="metric">
+                <strong id="sentenceMetric">0</strong>
+                <span>Oraciones</span>
+              </div>
+
+              <div class="metric">
+                <strong id="paragraphMetric">0</strong>
+                <span>Párrafos</span>
+              </div>
+
+              <div class="metric">
+                <strong id="connectorMetric">0</strong>
+                <span>Conectores</span>
+              </div>
+
+            </div>
+
+            <div
+              class="feedback-list"
+              id="writingFeedback"
+            >
+              <div class="feedback-item">
+                Escriba un fragmento y seleccione “Analizar fragmento”.
+              </div>
+            </div>
+
+          </section>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =====================================================
+         APLICACIÓN 3: ANÁLISIS DEL PDF
+    ====================================================== -->
+
+    <section class="page" id="page-analisis">
+
+      <div class="inner-hero">
+        <div class="container">
+
+          <h1>Análisis de consistencia interna</h1>
+
+          <p>
+            Cargue la ponencia en formato PDF y revise la correspondencia entre
+            sus componentes conceptuales, argumentativos y estructurales.
+          </p>
+
+        </div>
+      </div>
+
+      <div class="container workspace">
+
+        <section class="panel sticky">
+
+          <h2>Cargar ponencia</h2>
+
+          <p class="panel-intro">
+            El documento debe estar en formato PDF y contener texto
+            seleccionable.
+          </p>
+
+          <div class="form-group">
+
+            <label for="expectedConstruct">
+              Constructo esperado
+            </label>
+
+            <input
+              id="expectedConstruct"
+              type="text"
+              placeholder="Ej. alfabetización en inteligencia artificial"
+            >
+
+          </div>
+
+          <div class="form-grid-two">
+
+            <div class="form-group">
+
+              <label for="expectedDimensionOne">
+                Dimensión 1
+              </label>
+
+              <input
+                id="expectedDimensionOne"
+                type="text"
+                placeholder="Ej. crítica"
+              >
+
+            </div>
+
+            <div class="form-group">
+
+              <label for="expectedDimensionTwo">
+                Dimensión 2
+              </label>
+
+              <input
+                id="expectedDimensionTwo"
+                type="text"
+                placeholder="Ej. ética"
+              >
+
+            </div>
+
+          </div>
+
+          <div
+            class="upload-zone"
+            id="uploadZone"
+          >
+
+            <div class="upload-icon">
+              PDF
+            </div>
+
+            <strong>
+              Seleccione o arrastre su archivo PDF
+            </strong>
+
+            <p class="small">
+              Solo se admiten documentos con extensión .pdf.
+            </p>
+
+            <input
+              id="documentFile"
+              type="file"
+              accept="application/pdf,.pdf"
+            >
+
+            <div
+              class="progress-container hidden"
+              id="progressContainer"
+            >
+              <div
+                class="progress-bar"
+                id="progressBar"
+              ></div>
+            </div>
+
+          </div>
+
+          <div
+            class="notice hidden"
+            id="fileNotice"
+            role="alert"
+          ></div>
+
+          <button
+            class="button button-primary"
+            id="analyzeDocumentButton"
+            type="button"
+          >
+            Analizar consistencia del PDF
+          </button>
+
+        </section>
+
+        <section class="panel">
+
+          <h2>Informe de consistencia</h2>
+
+          <p class="panel-intro">
+            El diagnóstico es orientativo y debe complementarse con una
+            revisión académica especializada.
+          </p>
+
+          <div id="documentAnalysisOutput">
+
+            <div class="output-placeholder">
+              <div>
+
+                <strong>
+                  Aún no se ha analizado un documento.
+                </strong>
+
+                <p>
+                  Cargue un PDF para evaluar sus componentes estructurales,
+                  argumentativos y conceptuales.
+                </p>
+
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- =====================================================
+       PIE DE PÁGINA
+  ====================================================== -->
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+
+      <div>
+
+        <strong>
+          De la idea a la ponencia
+        </strong>
+
+        <div>
+          Herramientas para organizar, argumentar y comunicar.
+        </div>
+
+      </div>
+
+      <div>
+
+        Autor:
+
+        <a
+          href="https://orcid.org/0000-0002-2529-9155"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Carlos Enrique George-Reyes
+        </a>
+
+        <br>
+
+        <span>
+          ORCID: 0000-0002-2529-9155
+        </span>
+
+      </div>
+
+    </div>
+  </footer>
+
+  <script>
+    "use strict";
+
+    /* =====================================================
+       CONFIGURACIÓN DE PDF.JS
+    ===================================================== */
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+    /* =====================================================
+       UTILIDADES
+    ===================================================== */
+
+    function escapeHTML(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function normalizeText(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+    }
+
+    function capitalize(text) {
+      if (!text) {
+        return "";
+      }
+
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
+    function countWords(text) {
+      const words = text
+        .trim()
+        .match(
+          /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]+(?:[-'][A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]+)*/g
+        );
+
+      return words ? words.length : 0;
+    }
+
+    function splitSentences(text) {
+      return text
+        .replace(/\s+/g, " ")
+        .split(/(?<=[.!?])\s+/)
+        .map(sentence => sentence.trim())
+        .filter(Boolean);
+    }
+
+    function splitParagraphs(text) {
+      return text
+        .split(/\n\s*\n/)
+        .map(paragraph => paragraph.trim())
+        .filter(Boolean);
+    }
+
+    function countOccurrences(text, expression) {
+      const normalizedText = normalizeText(text);
+      const normalizedExpression = normalizeText(expression).trim();
+
+      if (!normalizedExpression) {
+        return 0;
+      }
+
+      return normalizedText.split(normalizedExpression).length - 1;
+    }
+
+    function getConnectors(text) {
+      const connectors = [
+        "además",
+        "asimismo",
+        "sin embargo",
+        "no obstante",
+        "por tanto",
+        "por lo tanto",
+        "en consecuencia",
+        "en cambio",
+        "por otra parte",
+        "en primer lugar",
+        "en segundo lugar",
+        "finalmente",
+        "desde esta perspectiva",
+        "en este sentido",
+        "a diferencia de",
+        "de este modo",
+        "por ejemplo",
+        "en contraste",
+        "aunque",
+        "debido a",
+        "puesto que"
+      ];
+
+      let total = 0;
+
+      connectors.forEach(connector => {
+        total += countOccurrences(text, connector);
+      });
+
+      return total;
+    }
+
+    function downloadText(filename, content) {
+      const blob = new Blob(
+        [content],
+        { type: "text/plain;charset=utf-8" }
+      );
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = filename;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(url);
+    }
+
+    async function copyText(text, button) {
+      try {
+        await navigator.clipboard.writeText(text);
+
+        const originalText = button.textContent;
+        button.textContent = "Copiado";
+
+        setTimeout(() => {
+          button.textContent = originalText;
+        }, 1600);
+      } catch (error) {
+        alert(
+          "No fue posible copiar automáticamente el contenido."
+        );
+      }
+    }
+
+    /* =====================================================
+       NAVEGACIÓN
+    ===================================================== */
+
+    const pages = document.querySelectorAll(".page");
+    const routeButtons = document.querySelectorAll("[data-route]");
+    const navLinks = document.querySelectorAll(".nav-link");
+    const mainNav = document.getElementById("mainNav");
+    const menuButton = document.getElementById("menuButton");
+
+    function openPage(route) {
+      const targetPage =
+        document.getElementById(`page-${route}`);
+
+      if (!targetPage) {
+        return;
+      }
+
+      pages.forEach(page => {
+        page.classList.remove("active");
+      });
+
+      targetPage.classList.add("active");
+
+      navLinks.forEach(link => {
+        link.classList.toggle(
+          "active",
+          link.dataset.route === route
+        );
+      });
+
+      mainNav.classList.remove("open");
+
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+      });
+
+      history.replaceState(
+        null,
+        "",
+        `#${route}`
+      );
+    }
+
+    routeButtons.forEach(button => {
+      button.addEventListener("click", () => {
+        openPage(button.dataset.route);
+      });
+    });
+
+    menuButton.addEventListener("click", () => {
+      mainNav.classList.toggle("open");
+    });
+
+    const initialRoute =
+      window.location.hash.replace("#", "");
+
+    if (
+      ["inicio", "estructura", "escritura", "analisis"]
+        .includes(initialRoute)
+    ) {
+      openPage(initialRoute);
+    }
+
+    /* =====================================================
+       APLICACIÓN 1: ESTRUCTURA TEÓRICA
+    ===================================================== */
+
+    const structureForm =
+      document.getElementById("structureForm");
+
+    const structureOutput =
+      document.getElementById("structureOutput");
+
+    let generatedStructurePlainText = "";
+
+    structureForm.addEventListener("submit", event => {
+      event.preventDefault();
+
+      const topic =
+        document.getElementById("researchTopic")
+          .value
+          .trim();
+
+      const context =
+        document.getElementById("researchContext")
+          .value
+          .trim() ||
+        "el contexto educativo seleccionado";
+
+      const construct =
+        document.getElementById("construct")
+          .value
+          .trim();
+
+      const dimensionOne =
+        document.getElementById("dimensionOne")
+          .value
+          .trim();
+
+      const dimensionTwo =
+        document.getElementById("dimensionTwo")
+          .value
+          .trim();
+
+      const theoreticalGap =
+        document.getElementById("theoreticalGap")
+          .value
+          .trim() ||
+        `la falta de integración conceptual entre ` +
+        `${dimensionOne} y ${dimensionTwo}`;
+
+      const contributionType =
+        document.getElementById("contributionType")
+          .value;
+
+      const titleOne =
+        `${capitalize(construct)} en ${context}: una lectura ` +
+        `desde ${dimensionOne} y ${dimensionTwo}`;
+
+      const titleTwo =
+        `Más allá de las aproximaciones convencionales: ` +
+        `${contributionType} sobre ${construct}`;
+
+      const titleThree =
+        `${capitalize(dimensionOne)} y ${dimensionTwo} como ` +
+        `dimensiones de ${construct}: implicaciones para ${topic}`;
+
+      const question =
+        `¿Cómo se articulan ${dimensionOne} y ${dimensionTwo} ` +
+        `en la comprensión teórica de ${construct} dentro de ` +
+        `${context}, y qué nuevo ${contributionType} puede ` +
+        `derivarse de esta relación?`;
+
+      const objective =
+        `Analizar teóricamente la relación entre ${dimensionOne} ` +
+        `y ${dimensionTwo} como componentes de ${construct} en ` +
+        `${context}, con la finalidad de proponer un ` +
+        `${contributionType} que contribuya a superar ` +
+        `${theoreticalGap}.`;
+
+      const thesis =
+        `Se sostiene que ${construct} no puede comprenderse ` +
+        `adecuadamente mediante aproximaciones fragmentadas, ` +
+        `debido a que la articulación entre ${dimensionOne} y ` +
+        `${dimensionTwo} permite explicar tensiones, alcances ` +
+        `e implicaciones insuficientemente desarrolladas en la ` +
+        `literatura sobre ${topic}.`;
+
+      const contribution =
+        `El aporte potencial consiste en desarrollar un ` +
+        `${contributionType} que conecte explícitamente ` +
+        `${dimensionOne} y ${dimensionTwo}, clarifique su función ` +
+        `dentro del constructo ${construct} y formule proposiciones ` +
+        `que orienten futuras investigaciones.`;
+
+      const variableExplanation =
+        `El constructo ${construct} representa la unidad conceptual ` +
+        `central. Las dimensiones ${dimensionOne} y ${dimensionTwo} ` +
+        `son componentes analíticos del constructo. Las variables o ` +
+        `indicadores pueden emplearse para describir cómo se manifiesta ` +
+        `cada dimensión, sin convertir necesariamente la ponencia en ` +
+        `un estudio empírico.`;
+
+      generatedStructurePlainText =
+`DE LA IDEA A LA PONENCIA
+
+TEMA
+${topic}
+
+CONTEXTO
+${context}
+
+CONSTRUCTO CENTRAL
+${construct}
+
+DIMENSIONES
+1. ${dimensionOne}
+2. ${dimensionTwo}
+
+POSIBLES TÍTULOS
+1. ${titleOne}
+2. ${titleTwo}
+3. ${titleThree}
+
+PREGUNTA ORIENTADORA
+${question}
+
+OBJETIVO
+${objective}
+
+TESIS ARGUMENTATIVA
+${thesis}
+
+NUEVO APORTE
+${contribution}
+
+RELACIÓN CONSTRUCTO–DIMENSIONES–VARIABLES
+${variableExplanation}
+
+ESTRUCTURA SUGERIDA
+
+1. Introducción
+Presentar el tema, justificar su relevancia, delimitar el problema teórico, formular el objetivo y anticipar la tesis.
+
+2. Delimitación del constructo
+Definir ${construct}, comparar las principales aproximaciones y precisar el significado adoptado.
+
+3. Primera dimensión: ${dimensionOne}
+Analizar sus bases conceptuales, componentes, alcances y relación con el constructo.
+
+4. Segunda dimensión: ${dimensionTwo}
+Analizar sus bases conceptuales, componentes, alcances y relación con el constructo.
+
+5. Articulación entre las dimensiones
+Explicar convergencias, tensiones y complementariedades entre ${dimensionOne} y ${dimensionTwo}.
+
+6. Vacío o tensión teórica
+Argumentar por qué ${theoreticalGap} representa una limitación en la literatura.
+
+7. Propuesta de aporte
+Desarrollar el ${contributionType}, sus componentes, proposiciones e implicaciones.
+
+8. Discusión
+Contrastar la propuesta con los enfoques revisados y precisar sus alcances y límites.
+
+9. Conclusiones
+Responder la pregunta, recuperar la tesis, sintetizar el aporte y proponer futuras líneas de investigación.`;
+
+      structureOutput.innerHTML = `
+        <div class="result-actions">
+
+          <button
+            class="button button-primary"
+            id="copyStructureButton"
+            type="button"
+          >
+            Copiar propuesta
+          </button>
+
+          <button
+            class="button button-secondary"
+            id="downloadStructureButton"
+            type="button"
+          >
+            Descargar como TXT
+          </button>
+
+        </div>
+
+        <div class="notice success">
+          La estructura prioriza un aporte teórico derivado de la
+          integración de las dos dimensiones.
+        </div>
+
+        <div class="result-block">
+          <h3>Posibles títulos</h3>
+
+          <ol>
+            <li>${escapeHTML(titleOne)}</li>
+            <li>${escapeHTML(titleTwo)}</li>
+            <li>${escapeHTML(titleThree)}</li>
+          </ol>
+        </div>
+
+        <div class="result-block">
+          <h3>Pregunta orientadora</h3>
+          <p>${escapeHTML(question)}</p>
+        </div>
+
+        <div class="result-block">
+          <h3>Objetivo</h3>
+          <p>${escapeHTML(objective)}</p>
+        </div>
+
+        <div class="result-block">
+          <h3>Tesis argumentativa</h3>
+          <p>${escapeHTML(thesis)}</p>
+        </div>
+
+        <div class="result-block">
+          <h3>Nuevo aporte potencial</h3>
+          <p>${escapeHTML(contribution)}</p>
+        </div>
+
+        <div class="result-block">
+          <h3>Relación constructo–dimensiones–variables</h3>
+          <p>${escapeHTML(variableExplanation)}</p>
+        </div>
+
+        <div class="result-block">
+          <h3>Estructura sugerida</h3>
+
+          <ol>
+
+            <li>
+              <strong>Introducción.</strong>
+              Presentación del tema, problema, objetivo y tesis.
+            </li>
+
+            <li>
+              <strong>Delimitación del constructo.</strong>
+              Definición y comparación de las principales aproximaciones
+              sobre ${escapeHTML(construct)}.
+            </li>
+
+            <li>
+              <strong>${escapeHTML(dimensionOne)}.</strong>
+              Fundamentos, alcances y relación con el constructo.
+            </li>
+
+            <li>
+              <strong>${escapeHTML(dimensionTwo)}.</strong>
+              Fundamentos, alcances y relación con el constructo.
+            </li>
+
+            <li>
+              <strong>Articulación conceptual.</strong>
+              Convergencias, tensiones y complementariedades.
+            </li>
+
+            <li>
+              <strong>Vacío teórico.</strong>
+              Justificación de la insuficiencia conceptual identificada.
+            </li>
+
+            <li>
+              <strong>Propuesta de aporte.</strong>
+              Desarrollo del ${escapeHTML(contributionType)}.
+            </li>
+
+            <li>
+              <strong>Discusión.</strong>
+              Contraste con la literatura y delimitación de alcances.
+            </li>
+
+            <li>
+              <strong>Conclusiones.</strong>
+              Respuesta a la pregunta, síntesis del aporte y agenda futura.
+            </li>
+
+          </ol>
+        </div>
+      `;
+
+      document
+        .getElementById("copyStructureButton")
+        .addEventListener("click", function () {
+          copyText(
+            generatedStructurePlainText,
+            this
+          );
+        });
+
+      document
+        .getElementById("downloadStructureButton")
+        .addEventListener("click", () => {
+          downloadText(
+            "estructura-ponencia-teorica.txt",
+            generatedStructurePlainText
+          );
+        });
+    });
+
+    /* =====================================================
+       APLICACIÓN 2: ORIENTACIÓN DE ESCRITURA
+    ===================================================== */
+
+    const tips = {
+      introduccion: {
+        title: "Cómo escribir la introducción",
+        text:
+          "Inicie con el fenómeno general, delimite el problema teórico, " +
+          "identifique el vacío en la literatura, explique su relevancia, " +
+          "formule el objetivo y cierre con la tesis que será defendida."
+      },
+
+      problema: {
+        title: "Cómo formular el problema teórico",
+        text:
+          "No presente únicamente un tema. Exponga una contradicción, " +
+          "fragmentación, insuficiencia conceptual o falta de integración " +
+          "entre perspectivas. Muestre qué no explica adecuadamente la " +
+          "literatura disponible."
+      },
+
+      argumento: {
+        title: "Estructura de un argumento académico",
+        text:
+          "Construya cada argumento mediante cuatro componentes: afirmación, " +
+          "fundamento conceptual, evidencia procedente de la literatura e " +
+          "interpretación propia. Cierre explicando cómo el argumento sostiene " +
+          "la tesis central."
+      },
+
+      contraargumento: {
+        title: "Uso del contraargumento",
+        text:
+          "Presente una perspectiva alternativa de manera justa, reconozca " +
+          "su contribución y explique posteriormente sus límites. El objetivo " +
+          "es demostrar por qué su propuesta ofrece una comprensión más amplia."
+      },
+
+      citas: {
+        title: "Integración de citas",
+        text:
+          "Evite colocar citas como elementos aislados. Introduzca la idea del " +
+          "autor, explique su relevancia y relacione la evidencia con su propio " +
+          "argumento. Una cita debe respaldar, contrastar o problematizar."
+      },
+
+      conclusiones: {
+        title: "Construcción de las conclusiones",
+        text:
+          "Responda directamente la pregunta, retome la tesis, sintetice el " +
+          "aporte, exponga sus implicaciones y reconozca los límites. No " +
+          "incorpore conceptos que no fueron desarrollados previamente."
+      },
+
+      estilo: {
+        title: "Estilo académico",
+        text:
+          "Utilice términos conceptualmente precisos, evite generalizaciones " +
+          "y controle la extensión de las oraciones. Prefiera verbos como " +
+          "analizar, argumentar, explicar, problematizar, integrar y proponer."
+      }
+    };
+
+    const tipDisplay =
+      document.getElementById("tipDisplay");
+
+    const writingText =
+      document.getElementById("writingText");
+
+    const writingFeedback =
+      document.getElementById("writingFeedback");
+
+    document.querySelectorAll("[data-tip]").forEach(button => {
+      button.addEventListener("click", () => {
+        const tip = tips[button.dataset.tip];
+
+        tipDisplay.innerHTML = `
+          <h3>${escapeHTML(tip.title)}</h3>
+          <p>${escapeHTML(tip.text)}</p>
+        `;
+      });
+    });
+
+    writingText.addEventListener(
+      "input",
+      updateWritingMetrics
+    );
+
+    document
+      .getElementById("analyzeWritingButton")
+      .addEventListener(
+        "click",
+        analyzeWriting
+      );
+
+    document
+      .getElementById("clearWritingButton")
+      .addEventListener("click", () => {
+        writingText.value = "";
+
+        updateWritingMetrics();
+
+        writingFeedback.innerHTML = `
+          <div class="feedback-item">
+            Escriba un fragmento y seleccione “Analizar fragmento”.
+          </div>
+        `;
+      });
+
+    function updateWritingMetrics() {
+      const text = writingText.value;
+      const sentences = splitSentences(text);
+      const paragraphs = splitParagraphs(text);
+
+      document.getElementById("wordMetric").textContent =
+        countWords(text);
+
+      document.getElementById("sentenceMetric").textContent =
+        sentences.length;
+
+      document.getElementById("paragraphMetric").textContent =
+        paragraphs.length;
+
+      document.getElementById("connectorMetric").textContent =
+        getConnectors(text);
+    }
+
+    function analyzeWriting() {
+      const text = writingText.value.trim();
+
+      if (!text) {
+        writingFeedback.innerHTML = `
+          <div class="feedback-item danger">
+            Debe escribir o pegar un fragmento antes de iniciar el análisis.
+          </div>
+        `;
+
+        return;
+      }
+
+      const wordCount = countWords(text);
+      const sentences = splitSentences(text);
+      const paragraphs = splitParagraphs(text);
+      const connectorCount = getConnectors(text);
+
+      const longSentences =
+        sentences.filter(
+          sentence => countWords(sentence) > 35
+        );
+
+      const veryLongParagraphs =
+        paragraphs.filter(
+          paragraph => countWords(paragraph) > 180
+        );
+
+      const weakExpressions = [
+        "muy importante",
+        "muchas cosas",
+        "de alguna manera",
+        "se puede decir",
+        "cabe mencionar",
+        "etcétera",
+        "etc.",
+        "desde siempre",
+        "todos sabemos",
+        "sin duda alguna"
+      ];
+
+      const detectedWeakExpressions =
+        weakExpressions.filter(expression =>
+          normalizeText(text).includes(
+            normalizeText(expression)
+          )
+        );
+
+      const thesisMarkers = [
+        "se sostiene que",
+        "este ensayo argumenta",
+        "se propone que",
+        "la tesis central",
+        "se defiende que"
+      ];
+
+      const hasThesisMarker =
+        thesisMarkers.some(marker =>
+          normalizeText(text).includes(
+            normalizeText(marker)
+          )
+        );
+
+      const citationPattern =
+        /(\([A-ZÁÉÍÓÚÑ][^()]{0,70},\s*\d{4}[a-z]?\))|(\[\d+(?:,\s*\d+)*\])/g;
+
+      const citations =
+        text.match(citationPattern) || [];
+
+      const feedback = [];
+
+      if (wordCount < 80) {
+        feedback.push({
+          type: "warning",
+          text:
+            "El fragmento es breve. Puede ser insuficiente para desarrollar " +
+            "una idea, presentar evidencia e interpretar sus implicaciones."
+        });
+      } else {
+        feedback.push({
+          type: "good",
+          text:
+            `El fragmento contiene ${wordCount} palabras y ofrece una base ` +
+            "suficiente para revisar su desarrollo argumentativo."
+        });
+      }
+
+      if (sentences.length > 0) {
+        const averageSentenceLength =
+          Math.round(wordCount / sentences.length);
+
+        if (averageSentenceLength > 32) {
+          feedback.push({
+            type: "warning",
+            text:
+              `Las oraciones tienen un promedio de ` +
+              `${averageSentenceLength} palabras. Considere dividir algunas.`
+          });
+        } else {
+          feedback.push({
+            type: "good",
+            text:
+              `La extensión promedio de las oraciones es de ` +
+              `${averageSentenceLength} palabras.`
+          });
+        }
+      }
+
+      if (longSentences.length > 0) {
+        feedback.push({
+          type: "warning",
+          text:
+            `Se identificaron ${longSentences.length} oraciones con más de ` +
+            "35 palabras. Revise subordinaciones y acumulación de ideas."
+        });
+      }
+
+      if (veryLongParagraphs.length > 0) {
+        feedback.push({
+          type: "warning",
+          text:
+            `${veryLongParagraphs.length} párrafos superan 180 palabras. ` +
+            "Considere separar argumentos."
+        });
+      }
+
+      if (connectorCount === 0 && sentences.length > 2) {
+        feedback.push({
+          type: "danger",
+          text:
+            "No se identificaron conectores académicos. Explicite relaciones " +
+            "de contraste, consecuencia, continuidad o ejemplificación."
+        });
+      } else {
+        feedback.push({
+          type: "good",
+          text:
+            `Se identificaron aproximadamente ${connectorCount} conectores ` +
+            "discursivos."
+        });
+      }
+
+      if (detectedWeakExpressions.length > 0) {
+        feedback.push({
+          type: "warning",
+          text:
+            `Revise expresiones poco precisas: ` +
+            `${detectedWeakExpressions.join(", ")}.`
+        });
+      }
+
+      if (!hasThesisMarker && wordCount > 150) {
+        feedback.push({
+          type: "warning",
+          text:
+            "No se identificó una formulación explícita de la tesis. Puede " +
+            "incorporar expresiones como “se sostiene que” o “este ensayo " +
+            "argumenta que”."
+        });
+      }
+
+      if (citations.length === 0 && wordCount > 120) {
+        feedback.push({
+          type: "warning",
+          text:
+            "No se detectaron citas mediante patrones convencionales. " +
+            "Verifique que las afirmaciones estén sustentadas."
+        });
+      } else if (citations.length > 0) {
+        feedback.push({
+          type: "good",
+          text:
+            `Se identificaron ${citations.length} posibles citas dentro del ` +
+            "fragmento."
+        });
+      }
+
+      writingFeedback.innerHTML =
+        feedback
+          .map(item => `
+            <div class="feedback-item ${item.type}">
+              ${escapeHTML(item.text)}
+            </div>
+          `)
+          .join("");
+    }
+
+    /* =====================================================
+       APLICACIÓN 3: CARGA Y LECTURA DEL PDF
+    ===================================================== */
+
+    const documentFile =
+      document.getElementById("documentFile");
+
+    const uploadZone =
+      document.getElementById("uploadZone");
+
+    const fileNotice =
+      document.getElementById("fileNotice");
+
+    const progressContainer =
+      document.getElementById("progressContainer");
+
+    const progressBar =
+      document.getElementById("progressBar");
+
+    const documentAnalysisOutput =
+      document.getElementById("documentAnalysisOutput");
+
+    let loadedDocumentText = "";
+    let loadedFilename = "";
+    let loadedPageCount = 0;
+
+    documentFile.addEventListener(
+      "change",
+      async () => {
+        const file = documentFile.files[0];
+
+        if (file) {
+          await loadPDF(file);
+        }
+      }
+    );
+
+    ["dragenter", "dragover"].forEach(eventName => {
+      uploadZone.addEventListener(
+        eventName,
+        event => {
+          event.preventDefault();
+          uploadZone.classList.add("dragover");
+        }
+      );
+    });
+
+    ["dragleave", "drop"].forEach(eventName => {
+      uploadZone.addEventListener(
+        eventName,
+        event => {
+          event.preventDefault();
+          uploadZone.classList.remove("dragover");
+        }
+      );
+    });
+
+    uploadZone.addEventListener(
+      "drop",
+      async event => {
+        const file =
+          event.dataTransfer.files[0];
+
+        if (file) {
+          await loadPDF(file);
+        }
+      }
+    );
+
+    document
+      .getElementById("analyzeDocumentButton")
+      .addEventListener(
+        "click",
+        analyzeDocumentConsistency
+      );
+
+    async function loadPDF(file) {
+      loadedDocumentText = "";
+      loadedFilename = "";
+      loadedPageCount = 0;
+
+      if (
+        file.type !== "application/pdf" &&
+        !file.name.toLowerCase().endsWith(".pdf")
+      ) {
+        showFileNotice(
+          "El archivo seleccionado no es un PDF válido.",
+          "danger"
+        );
+
+        return;
+      }
+
+      loadedFilename = file.name;
+
+      progressContainer.classList.remove("hidden");
+      progressBar.style.width = "0%";
+
+      showFileNotice(
+        `Procesando ${file.name}...`,
+        "success"
+      );
+
+      try {
+        const arrayBuffer =
+          await file.arrayBuffer();
+
+        const loadingTask =
+          pdfjsLib.getDocument({
+            data: arrayBuffer
+          });
+
+        const pdf =
+          await loadingTask.promise;
+
+        loadedPageCount = pdf.numPages;
+
+        const pagesText = [];
+
+        for (
+          let pageNumber = 1;
+          pageNumber <= pdf.numPages;
+          pageNumber++
+        ) {
+          const page =
+            await pdf.getPage(pageNumber);
+
+          const textContent =
+            await page.getTextContent();
+
+          const pageText =
+            textContent.items
+              .map(item => item.str)
+              .join(" ")
+              .replace(/\s+/g, " ")
+              .trim();
+
+          pagesText.push(
+            `\n\nPÁGINA ${pageNumber}\n${pageText}`
+          );
+
+          const progress =
+            Math.round(
+              (pageNumber / pdf.numPages) * 100
+            );
+
+          progressBar.style.width =
+            `${progress}%`;
+        }
+
+        loadedDocumentText =
+          pagesText.join("\n");
+
+        const wordCount =
+          countWords(loadedDocumentText);
+
+        if (wordCount < 20) {
+          throw new Error(
+            "El PDF no contiene suficiente texto seleccionable. " +
+            "Es posible que sea un documento escaneado como imagen."
+          );
+        }
+
+        showFileNotice(
+          `${file.name} fue cargado correctamente. Se extrajeron ` +
+          `${wordCount} palabras de ${loadedPageCount} páginas.`,
+          "success"
+        );
+      } catch (error) {
+        loadedDocumentText = "";
+
+        progressBar.style.width = "0%";
+
+        showFileNotice(
+          error.message ||
+          "No fue posible procesar el archivo PDF.",
+          "danger"
+        );
+      }
+    }
+
+    function showFileNotice(message, type) {
+      fileNotice.textContent = message;
+      fileNotice.className =
+        `notice ${type}`;
+    }
+
+    /* =====================================================
+       ANÁLISIS DE CONSISTENCIA DEL PDF
+    ===================================================== */
+
+    function analyzeDocumentConsistency() {
+      if (!loadedDocumentText.trim()) {
+        showFileNotice(
+          "Primero debe cargar un archivo PDF válido.",
+          "danger"
+        );
+
+        return;
+      }
+
+      const text =
+        loadedDocumentText;
+
+      const normalized =
+        normalizeText(text);
+
+      const expectedConstruct =
+        document
+          .getElementById("expectedConstruct")
+          .value
+          .trim();
+
+      const dimensionOne =
+        document
+          .getElementById("expectedDimensionOne")
+          .value
+          .trim();
+
+      const dimensionTwo =
+        document
+          .getElementById("expectedDimensionTwo")
+          .value
+          .trim();
+
+      const wordCount =
+        countWords(text);
+
+      const sentences =
+        splitSentences(text);
+
+      const paragraphs =
+        splitParagraphs(text);
+
+      const criteria = [];
+
+      const hasIntroduction =
+        /\bintroducci[oó]n\b/i.test(text) ||
+        /\bantecedentes\b/i.test(text);
+
+      const hasDevelopment =
+        /\bdesarrollo\b/i.test(text) ||
+        /\bmarco te[oó]rico\b/i.test(text) ||
+        /\bdiscusi[oó]n\b/i.test(text) ||
+        /\bargumentaci[oó]n\b/i.test(text);
+
+      const hasConclusions =
+        /\bconclusiones?\b/i.test(text) ||
+        /\bconsideraciones finales\b/i.test(text) ||
+        /\breflexiones finales\b/i.test(text);
+
+      const hasReferences =
+        /\breferencias\b/i.test(text) ||
+        /\bbibliograf[ií]a\b/i.test(text);
+
+      const hasQuestion =
+        text.includes("?") &&
+        (
+          normalized.includes("pregunta") ||
+          normalized.includes("como") ||
+          normalized.includes("de que manera") ||
+          normalized.includes("en que medida")
+        );
+
+      const objectiveVerbs = [
+        "analizar",
+        "examinar",
+        "comprender",
+        "explicar",
+        "argumentar",
+        "problematizar",
+        "proponer",
+        "integrar",
+        "discutir",
+        "reflexionar"
+      ];
+
+      const hasObjective =
+        normalized.includes("objetivo") &&
+        objectiveVerbs.some(
+          verb => normalized.includes(verb)
+        );
+
+      const thesisMarkers = [
+        "se sostiene que",
+        "este ensayo argumenta",
+        "se defiende que",
+        "la tesis central",
+        "se propone que",
+        "este trabajo sostiene"
+      ];
+
+      const hasThesis =
+        thesisMarkers.some(
+          marker => normalized.includes(marker)
+        );
+
+      const citationPattern =
+        /(\([A-ZÁÉÍÓÚÑ][^()]{0,80},\s*\d{4}[a-z]?\))|(\[\d+(?:,\s*\d+)*\])/g;
+
+      const citationCount =
+        (text.match(citationPattern) || []).length;
+
+      const connectorCount =
+        getConnectors(text);
+
+      const longSentences =
+        sentences.filter(
+          sentence => countWords(sentence) > 40
+        ).length;
+
+      addCriterion(
+        criteria,
+        "Estructura general",
+        hasIntroduction && hasConclusions,
+        hasIntroduction &&
+        hasDevelopment &&
+        hasConclusions,
+        hasIntroduction &&
+        hasDevelopment &&
+        hasConclusions
+          ? "El documento presenta introducción, desarrollo y conclusiones."
+          : "Revise la presencia y delimitación de introducción, desarrollo y conclusiones.",
+        15
+      );
+
+      addCriterion(
+        criteria,
+        "Pregunta orientadora",
+        hasQuestion,
+        hasQuestion,
+        hasQuestion
+          ? "Se identificó una posible pregunta orientadora."
+          : "No se identificó claramente una pregunta orientadora.",
+        10
+      );
+
+      addCriterion(
+        criteria,
+        "Objetivo académico",
+        hasObjective,
+        hasObjective,
+        hasObjective
+          ? "Se identificó un objetivo acompañado de un verbo analítico."
+          : "Formule explícitamente un objetivo con un verbo como analizar, argumentar o proponer.",
+        10
+      );
+
+      addCriterion(
+        criteria,
+        "Tesis argumentativa",
+        hasThesis,
+        hasThesis,
+        hasThesis
+          ? "El documento parece formular una tesis explícita."
+          : "Explicite la afirmación central que será defendida.",
+        15
+      );
+
+      addCriterion(
+        criteria,
+        "Citas y sustentación",
+        citationCount > 0,
+        citationCount >=
+          Math.max(
+            2,
+            Math.floor(wordCount / 700)
+          ),
+        citationCount > 0
+          ? `Se identificaron ${citationCount} posibles citas.`
+          : "No se detectaron citas mediante los patrones revisados.",
+        10
+      );
+
+      addCriterion(
+        criteria,
+        "Referencias",
+        hasReferences,
+        hasReferences,
+        hasReferences
+          ? "Se identificó una sección de referencias o bibliografía."
+          : "No se identificó una sección final de referencias.",
+        10
+      );
+
+      addCriterion(
+        criteria,
+        "Conectividad discursiva",
+        connectorCount > 0,
+        connectorCount >=
+          Math.max(
+            3,
+            Math.floor(wordCount / 350)
+          ),
+        connectorCount > 0
+          ? `Se identificaron aproximadamente ${connectorCount} conectores.`
+          : "No se identificaron suficientes conectores argumentativos.",
+        10
+      );
+
+      const conceptChecks = [];
+
+      if (expectedConstruct) {
+        conceptChecks.push({
+          label: `Constructo: ${expectedConstruct}`,
+          term: expectedConstruct,
+          count: countOccurrences(
+            text,
+            expectedConstruct
+          )
+        });
+      }
+
+      if (dimensionOne) {
+        conceptChecks.push({
+          label: `Dimensión 1: ${dimensionOne}`,
+          term: dimensionOne,
+          count: countOccurrences(
+            text,
+            dimensionOne
+          )
+        });
+      }
+
+      if (dimensionTwo) {
+        conceptChecks.push({
+          label: `Dimensión 2: ${dimensionTwo}`,
+          term: dimensionTwo,
+          count: countOccurrences(
+            text,
+            dimensionTwo
+          )
+        });
+      }
+
+      const allConceptsPresent =
+        conceptChecks.length === 0 ||
+        conceptChecks.every(
+          item => item.count > 0
+        );
+
+      const conceptsRepeated =
+        conceptChecks.length === 0 ||
+        conceptChecks.every(
+          item => item.count >= 2
+        );
+
+      addCriterion(
+        criteria,
+        "Continuidad conceptual",
+        allConceptsPresent,
+        conceptsRepeated,
+        conceptChecks.length === 0
+          ? "No se proporcionaron conceptos esperados para la comprobación."
+          : conceptChecks
+              .map(
+                item =>
+                  `${item.label}: ${item.count} menciones`
+              )
+              .join(". "),
+        15
+      );
+
+      const styleIsAcceptable =
+        sentences.length === 0 ||
+        longSentences / sentences.length < 0.25;
+
+      addCriterion(
+        criteria,
+        "Claridad de las oraciones",
+        styleIsAcceptable,
+        longSentences === 0,
+        longSentences === 0
+          ? "No se identificaron oraciones de más de 40 palabras."
+          : `Se identificaron ${longSentences} oraciones de más de 40 palabras.`,
+        5
+      );
+
+      const score =
+        criteria.reduce(
+          (total, criterion) =>
+            total + criterion.score,
+          0
+        );
+
+      const scoreLabel =
+        score >= 80
+          ? "Consistencia alta"
+          : score >= 60
+            ? "Consistencia moderada"
+            : "Consistencia por fortalecer";
+
+      const conclusionText =
+        extractConclusionSection(text);
+
+      const conclusionConcepts =
+        conceptChecks.map(item => ({
+          label: item.label,
+          count: countOccurrences(
+            conclusionText,
+            item.term
+          )
+        }));
+
+      const recommendations =
+        buildRecommendations(
+          criteria,
+          conclusionConcepts,
+          hasConclusions
+        );
+
+      const reportText =
+        buildReportText({
+          filename: loadedFilename,
+          pageCount: loadedPageCount,
+          wordCount,
+          paragraphCount: paragraphs.length,
+          sentenceCount: sentences.length,
+          score,
+          scoreLabel,
+          criteria,
+          recommendations
+        });
+
+      documentAnalysisOutput.innerHTML = `
+        <div class="result-actions">
+
+          <button
+            class="button button-secondary"
+            id="downloadReportButton"
+            type="button"
+          >
+            Descargar informe
+          </button>
+
+        </div>
+
+        <div class="score-container">
+
+          <div
+            class="score-circle"
+            style="--score-angle: ${score * 3.6}deg"
+          >
+            <strong>${score}</strong>
+          </div>
+
+          <div>
+
+            <h3>${escapeHTML(scoreLabel)}</h3>
+
+            <p>
+              Archivo:
+              <strong>${escapeHTML(loadedFilename)}</strong>
+            </p>
+
+            <p>
+              ${loadedPageCount} páginas, ${wordCount} palabras,
+              ${paragraphs.length} bloques de texto y
+              ${sentences.length} oraciones.
+            </p>
+
+          </div>
+        </div>
+
+        <div class="analysis-grid">
+          ${criteria.map(renderCriterion).join("")}
+        </div>
+
+        <div
+          class="result-block"
+          style="margin-top: 22px;"
+        >
+          <h3>Recomendaciones prioritarias</h3>
+
+          <ol>
+            ${recommendations
+              .map(
+                item =>
+                  `<li>${escapeHTML(item)}</li>`
+              )
+              .join("")}
+          </ol>
+        </div>
+
+        <details>
+
+          <summary>
+            <strong>Vista previa del texto extraído</strong>
+          </summary>
+
+          <div class="document-preview">
+            ${escapeHTML(text.slice(0, 12000))}
+            ${
+              text.length > 12000
+                ? "\n\n[Vista previa recortada]"
+                : ""
+            }
+          </div>
+
+        </details>
+      `;
+
+      document
+        .getElementById("downloadReportButton")
+        .addEventListener("click", () => {
+          downloadText(
+            "informe-consistencia-ponencia.txt",
+            reportText
+          );
+        });
+    }
+
+    function addCriterion(
+      criteria,
+      name,
+      minimumCondition,
+      strongCondition,
+      message,
+      weight
+    ) {
+      let status = "danger";
+      let score = 0;
+
+      if (strongCondition) {
+        status = "good";
+        score = weight;
+      } else if (minimumCondition) {
+        status = "warning";
+        score = Math.round(weight * 0.55);
+      }
+
+      criteria.push({
+        name,
+        status,
+        message,
+        score,
+        weight
+      });
+    }
+
+    function renderCriterion(criterion) {
+      const statusText = {
+        good: "Adecuado",
+        warning: "Revisar",
+        danger: "No identificado"
+      };
+
+      return `
+        <article class="analysis-card">
+
+          <span
+            class="status status-${criterion.status}"
+          >
+            ${statusText[criterion.status]}
+          </span>
+
+          <h4>${escapeHTML(criterion.name)}</h4>
+
+          <p>${escapeHTML(criterion.message)}</p>
+
+          <small>
+            Puntaje:
+            ${criterion.score} de ${criterion.weight}
+          </small>
+
+        </article>
+      `;
+    }
+
+    function extractConclusionSection(text) {
+      const normalized =
+        normalizeText(text);
+
+      const possibleMarkers = [
+        "conclusiones",
+        "conclusion",
+        "consideraciones finales",
+        "reflexiones finales"
+      ];
+
+      let markerIndex = -1;
+
+      possibleMarkers.forEach(marker => {
+        const currentIndex =
+          normalized.lastIndexOf(marker);
+
+        if (currentIndex > markerIndex) {
+          markerIndex = currentIndex;
+        }
+      });
+
+      if (markerIndex === -1) {
+        return "";
+      }
+
+      return text.slice(markerIndex);
+    }
+
+    function buildRecommendations(
+      criteria,
+      conclusionConcepts,
+      hasConclusions
+    ) {
+      const recommendations = [];
+
+      criteria.forEach(criterion => {
+        if (criterion.status === "danger") {
+          switch (criterion.name) {
+            case "Pregunta orientadora":
+              recommendations.push(
+                "Formule una pregunta abierta que conecte el constructo, " +
+                "las dimensiones y el aporte teórico esperado."
+              );
+              break;
+
+            case "Objetivo académico":
+              recommendations.push(
+                "Incluya un objetivo explícito que indique qué se analizará, " +
+                "desde qué dimensiones y con qué finalidad."
+              );
+              break;
+
+            case "Tesis argumentativa":
+              recommendations.push(
+                "Declare la tesis central mediante una afirmación discutible " +
+                "que pueda ser defendida con literatura y razonamiento."
+              );
+              break;
+
+            case "Citas y sustentación":
+              recommendations.push(
+                "Sustente las definiciones, comparaciones y afirmaciones " +
+                "teóricas mediante literatura científica pertinente."
+              );
+              break;
+
+            case "Referencias":
+              recommendations.push(
+                "Incorpore una sección de referencias y verifique la " +
+                "correspondencia entre todas las citas y sus fuentes."
+              );
+              break;
+
+            case "Continuidad conceptual":
+              recommendations.push(
+                "Mantenga el constructo y las dimensiones centrales a lo " +
+                "largo de la introducción, el desarrollo y las conclusiones."
+              );
+              break;
+
+            default:
+              recommendations.push(
+                criterion.message
+              );
+          }
+        }
+
+        if (criterion.status === "warning") {
+          recommendations.push(
+            `Fortalezca el componente “${criterion.name}”: ` +
+            criterion.message
+          );
+        }
+      });
+
+      if (
+        hasConclusions &&
+        conclusionConcepts.length > 0
+      ) {
+        conclusionConcepts.forEach(item => {
+          if (item.count === 0) {
+            recommendations.push(
+              `Recupere ${item.label.toLowerCase()} en las conclusiones para ` +
+              "cerrar la continuidad conceptual del documento."
+            );
+          }
+        });
+      }
+
+      if (recommendations.length === 0) {
+        recommendations.push(
+          "La estructura general es consistente. Realice una revisión " +
+          "cualitativa de la fuerza de los argumentos y del carácter novedoso " +
+          "del aporte propuesto."
+        );
+
+        recommendations.push(
+          "Verifique que las conclusiones respondan directamente la pregunta " +
+          "y no se limiten a resumir los apartados anteriores."
+        );
+      }
+
+      return [
+        ...new Set(recommendations)
+      ].slice(0, 10);
+    }
+
+    function buildReportText(data) {
+      const criteriaText =
+        data.criteria
+          .map(criterion => {
+            return (
+              `${criterion.name}\n` +
+              `Estado: ${criterion.status}\n` +
+              `Puntaje: ${criterion.score} de ${criterion.weight}\n` +
+              `${criterion.message}`
+            );
+          })
+          .join("\n\n");
+
+      const recommendationText =
+        data.recommendations
+          .map(
+            (recommendation, index) =>
+              `${index + 1}. ${recommendation}`
+          )
+          .join("\n");
+
+      return (
+`INFORME DE CONSISTENCIA INTERNA
+
+Archivo: ${data.filename}
+Páginas: ${data.pageCount}
+Puntaje: ${data.score} de 100
+Resultado: ${data.scoreLabel}
+Palabras: ${data.wordCount}
+Bloques de texto: ${data.paragraphCount}
+Oraciones: ${data.sentenceCount}
+
+CRITERIOS ANALIZADOS
+
+${criteriaText}
+
+RECOMENDACIONES
+
+${recommendationText}
+
+NOTA
+Este diagnóstico es automatizado y orientativo. Debe complementarse con una revisión académica del contenido, la calidad de las fuentes, la solidez del razonamiento y la originalidad del aporte.`
+      );
+    }
+  </script>
+
+</body>
+</html>
+```
